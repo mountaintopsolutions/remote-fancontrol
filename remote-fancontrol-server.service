@@ -1,0 +1,15 @@
+[Unit]
+Description=Remote Fan Control Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python -m amdgpu_fancontrol.server.fan_controller
+Restart=always
+RestartSec=5
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 

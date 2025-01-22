@@ -1,0 +1,28 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python package build artifacts
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local development files
+.env
+.env.*
+*.log
+
+# System files
+.DS_Store
+Thumbs.db 

@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "remote-fancontrol"
+version = "0.1.0"
+description = "Remote fan control for AMD GPUs in VMs"
+requires-python = ">=3.7"
+dependencies = [
+    "asyncio>=3.4.3",
+    "colorama>=0.4.6",
+] 
