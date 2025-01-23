@@ -195,13 +195,7 @@ After installation, edit these files to match your system configuration:
 - Server: Update fan control paths in `fancontrol-server.json`
 - Client: Update server IP and GPU temperature sensor paths in `fancontrol-client.json`
 
-## Systemd Service
-
-Create `/etc/systemd/system/remote-fancontrol.service`:
-
-See `remote-fancontrol-server.service` for server example.
-
-See `remote-fancontrol-client.service` for client example.
+- Copy them to /etc/remote-fancontrol/ on the server and the client.
 
 Install and start the service:
 
