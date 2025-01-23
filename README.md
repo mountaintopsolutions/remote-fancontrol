@@ -70,28 +70,7 @@ Note: The server and client should be installed on different machines - the serv
 
 There are two ways to configure the fan controls:
 
-1. Using a configuration file:
-```json
-# /etc/remote-fancontrol/fancontrol-server.json
-{
-    "temps": [35000, 55000, 80000, 90000],
-    "pwms": [0, 100, 153, 255],
-    "hysteresis": 6000,
-    "sleep_interval": 1.0,
-    "port": 7777,
-    "host": "0.0.0.0",
-    "failsafe_fan_percent": 80,
-    "initial_fan_percent": 0,
-    "fans": {
-        "gpu0": {
-            "pwm_path": "/sys/class/hwmon/hwmon3/pwm4",
-            "mode_path": "/sys/class/hwmon/hwmon3/pwm4_enable"
-        }
-    }
-}
-```
-
-Then run:
+1. See below to configure the server config file, then run:
 ```bash
 python -m remote_fancontrol.server.fan_controller
 # or
@@ -130,13 +109,17 @@ Note: The default host 0.0.0.0 allows connections from any interface. To restric
 ### Virtual Machine (Client)
 
 Run the client:
+
+As with the server, there are two ways to configure the client:
+
+1. See below to configure the client config file, then run:
 ```bash
 python -m remote_fancontrol.client
 # or
 remote-fancontrol-client
 ```
 
-Or specify GPU temperature sensors:
+2. Using command line arguments to specify GPU temperature sensors:
 
 ```
 python -m remote_fancontrol.client \
