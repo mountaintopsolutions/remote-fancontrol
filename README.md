@@ -1,10 +1,6 @@
-# remote-fancontrol
-
-Fancontrol script modified to get its values from a daemon on a remote VM, useful when using system fan headers to control fans of GPUs that are PCIE Passthroughed.
-
 ## Overview
 
-A client-server application that allows controlling GPU fans when the GPU is passed through to a VM. The client runs in the VM to monitor temperatures, while the server runs on the host to control the fans.
+A client-server application that allows controlling GPU fans when the GPU(s) are passed through to a VM. The client runs in the VM that the GPU is passed through to, to monitor temperatures, while the server runs on the host to control the fans via motherboard PWM headers.
 
 ## Features
 
@@ -24,10 +20,23 @@ A client-server application that allows controlling GPU fans when the GPU is pas
 
 ## Installation
 
-### Basic Installation
+### System-wide Installation
+
+For system-wide installation with systemd services:
+
+```bash
+# Install the server (on the host machine)
+sudo ./install.sh --install-server
+
+# Install the client (on the VM)
+sudo ./install.sh --install-client
+```
+
+### Development Installation
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/remote-fancontrol.git
+git clone https://github.com/mountaintopsolutions/remote-fancontrol.git
 cd remote-fancontrol
 
 # Install in editable mode (for development)
@@ -40,19 +49,7 @@ pip install -e ".[dev]"
 pip install -r requirements.txt
 ```
 
-### System-wide Installation
-For system-wide installation with systemd services:
-```bash
-# Install the server (on the host machine)
-sudo ./install.sh --install-server
-
-# Install the client (on the VM)
-sudo ./install.sh --install-client
-```
-
-After installation, edit the service configuration in:
-- Server: `/etc/systemd/system/remote-fancontrol-server.service`
-- Client: `/etc/systemd/system/remote-fancontrol-client.service`
+Note: You still need to enable / start the systemd services manually after you have configured the files in /etc/remote-fancontrol/ for your system.
 
 Then enable and start the service:
 ```bash
@@ -65,9 +62,9 @@ sudo systemctl enable remote-fancontrol-client
 sudo systemctl start remote-fancontrol-client
 ```
 
-Note: The server and client should be installed on different machines - the server on the host controlling the fans, and the client on the VM monitoring temperatures.
+Note: The server and client should be installed on different machines - the server on the host controlling the fans, and the client on the VM monitoring device temperatures.
 
-## Usage
+## Configuration files & Manual Usage
 
 ### Host System (Server)
 
