@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict
 import json
 import os
 from pathlib import Path
@@ -25,6 +25,8 @@ class FanControlConfig:
     HOST: str = "0.0.0.0"
     # Fan configuration mapping
     fans: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    # GPU temperature sensor mapping (client)
+    gpus: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
     @classmethod
     def load_config(cls, config_type: str = "server") -> "FanControlConfig":
@@ -55,6 +57,8 @@ class FanControlConfig:
                 "host": "0.0.0.0",
                 "failsafe_fan_percent": 80,
                 "initial_fan_percent": 0,
+                "fans": {},
+                "gpus": {},
             },
             "client": {
                 "sleep_interval": 1.0,
@@ -65,6 +69,8 @@ class FanControlConfig:
                 "hysteresis": 0,
                 "failsafe_fan_percent": 0,
                 "initial_fan_percent": 0,
+                "fans": {},
+                "gpus": {},
             },
         }
 
@@ -121,6 +127,7 @@ class FanControlConfig:
                 "initial_fan_percent", defaults[config_type]["initial_fan_percent"]
             ),
             fans=config_data.get("fans", defaults[config_type].get("fans", {})),
+            gpus=config_data.get("gpus", defaults[config_type].get("gpus", {})),
         )
 
     def __post_init__(self):

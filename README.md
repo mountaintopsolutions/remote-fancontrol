@@ -134,7 +134,7 @@ Note: The default host 0.0.0.0 allows connections from any interface. To restric
 
 Run the client:
 ```bash
-python -m remote_fancontrol.client.temperature_monitor
+python -m remote_fancontrol.client
 # or
 remote-fancontrol-client
 ```
@@ -142,7 +142,7 @@ remote-fancontrol-client
 Or specify GPU temperature sensors:
 
 ```
-python -m amdgpu-fancontrol.client.temperature_monitor \
+python -m remote_fancontrol.client \
     --host <host-ip> \
     --port 7777 \
     --gpu-paths /sys/class/hwmon/hwmon1/temp1_input /sys/class/hwmon/hwmon2/temp1_input \
@@ -179,38 +179,44 @@ Client configuration (`/etc/remote-fancontrol/fancontrol-client.json`):
 {
     "sleep_interval": 1.0,
     "port": 7777,
-    "host": "192.168.70.31"
+    "host": "192.168.70.31",
+    "gpus": {
+        "gpu0": {
+            "temp_path": "/sys/class/hwmon/hwmon1/temp1_input"
+        },
+        "gpu1": {
+            "temp_path": "/sys/class/hwmon/hwmon2/temp1_input"
+        }
+    }
 }
 ```
 
-After installation, edit these files to match your system configuration. The server configuration must be updated with your GPU fan paths, and the client configuration must be updated with your server's IP address.
+After installation, edit these files to match your system configuration:
+- Server: Update fan control paths in `fancontrol-server.json`
+- Client: Update server IP and GPU temperature sensor paths in `fancontrol-client.json`
 
 ## Systemd Service
 
 Create `/etc/systemd/system/remote-fancontrol.service`:
 
-```
-[Unit]
-Description=Remote Fan Control Server
-After=network.target
+See `remote-fancontrol-server.service` for server example.
 
-[Service]
-Type=simple
-ExecStart=/usr/bin/python -m amdgpu-fancontrol.server.fan_controller \
-    --host 0.0.0.0 \
-    --port 7777
-Restart=always
-User=root
-
-[Install]
-WantedBy=multi-user.target
-```
+See `remote-fancontrol-client.service` for client example.
 
 Install and start the service:
 
+Server Installation:
 ```
-sudo ./install-service.sh install
-sudo systemctl start remote-fancontrol
+sudo ./install.sh --install-server
+sudo systemctl start remote-fancontrol-server
+sudo systemctl enable remote-fancontrol-server
+```
+
+Client Installation:
+```
+sudo ./install.sh --install-client
+sudo systemctl start remote-fancontrol-client
+sudo systemctl enable remote-fancontrol-client
 ```
 
 ## Troubleshooting

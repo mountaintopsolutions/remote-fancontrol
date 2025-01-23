@@ -25,4 +25,8 @@ dev = [
 
 [project.scripts]
 remote-fancontrol-server = "remote_fancontrol.server.fan_controller:main"
-remote-fancontrol-client = "remote_fancontrol.client.temperature_monitor:main" 
+remote-fancontrol-client = "remote_fancontrol.client.temperature_monitor:main"
+
+[project.entry-points."remote_fancontrol"]
+server = "remote_fancontrol.server:main"
+client = "remote_fancontrol.client:main" 

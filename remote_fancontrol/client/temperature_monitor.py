@@ -83,50 +83,38 @@ logger.setLevel(logging.INFO)
 class TemperatureMonitor:
     def __init__(self, config: FanControlConfig, gpu_paths: Optional[List[str]] = None):
         self.config = config
-        self.temp_paths = self._find_temp_inputs(gpu_paths)
-        if not self.temp_paths:
-            raise ValueError("No valid temperature input files found")
-        self.total_reconnects = 0  # Add reconnection counter
+        self.gpu_paths = []
 
-    def _find_temp_inputs(
-        self, gpu_paths: Optional[List[str]] = None
-    ) -> Dict[str, Path]:
-        """Find temperature input files in hwmon
-
-        Args:
-            gpu_paths: Optional list of specific hwmon paths to use
-
-        Returns:
-            Dict mapping GPU identifier to temperature input path
-        """
-        temp_paths = {}
-
+        # First try command line paths
         if gpu_paths:
-            # Use specified paths with sequential IDs
-            for i, path in enumerate(gpu_paths):
-                path = Path(path)
-                if path.exists():
-                    gpu_id = f"gpu{i}"
-                    temp_paths[gpu_id] = path
+            for path in gpu_paths:
+                if Path(path).exists():
+                    self.gpu_paths.append(Path(path))
                 else:
-                    logger.warning(f"Specified path not found: {path}")
-        else:
-            # Auto-detect temperature input files
+                    logger.error(f"Temperature sensor not found: {path}")
+
+        # Then try config file paths
+        elif self.config.gpus:
+            for gpu_id, gpu_config in self.config.gpus.items():
+                path = Path(gpu_config["temp_path"])
+                if path.exists():
+                    self.gpu_paths.append(path)
+                    logger.info(f"Using temperature sensor for {gpu_id}: {path}")
+                else:
+                    logger.error(f"Temperature sensor not found for {gpu_id}: {path}")
+
+        # Finally try auto-detection
+        if not self.gpu_paths:
+            logger.info("No GPU paths configured, attempting auto-detection")
             pattern = "/sys/class/hwmon/hwmon*/temp1_input"
-            gpu_count = 0
-            for temp_file in glob.glob(pattern):
-                path = Path(temp_file)
-                if self._is_gpu_temp(path.parent):
-                    gpu_id = f"gpu{gpu_count}"
-                    temp_paths[gpu_id] = path
-                    gpu_count += 1
+            for path in glob.glob(pattern):
+                self.gpu_paths.append(Path(path))
 
-        if not temp_paths:
-            logger.error("No temperature input files found")
-        else:
-            logger.info(f"Found GPUs: {list(temp_paths.keys())}")
+        if not self.gpu_paths:
+            raise ValueError("No valid temperature sensor paths found")
 
-        return temp_paths
+        logger.info(f"Monitoring {len(self.gpu_paths)} temperature sensors")
+        self.total_reconnects = 0  # Add reconnection counter
 
     def _is_gpu_temp(self, hwmon_path: Path) -> bool:
         """Check if hwmon path belongs to a GPU"""
@@ -143,7 +131,7 @@ class TemperatureMonitor:
         """Read current temperatures from all monitored GPUs"""
         temperatures = {}
 
-        for gpu_name, temp_path in self.temp_paths.items():
+        for gpu_name, temp_path in self.gpu_paths.items():
             try:
                 if temp_path.exists():
                     temp = int(temp_path.read_text().strip())
