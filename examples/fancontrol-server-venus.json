@@ -1,0 +1,16 @@
+{
+    "temps": [35000, 55000, 80000, 90000],
+    "pwms": [0, 100, 153, 255],
+    "hysteresis": 6000,
+    "sleep_interval": 1.0,
+    "port": 7777,
+    "host": "0.0.0.0",
+    "failsafe_fan_percent": 80,
+    "initial_fan_percent": 0,
+    "fans": {
+        "gpu0": {
+            "pwm_path": "/sys/class/hwmon/hwmon3/pwm4",
+            "mode_path": "/sys/class/hwmon/hwmon3/pwm4_enable"
+        }
+    }
+} 

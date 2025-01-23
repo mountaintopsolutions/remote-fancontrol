@@ -3,11 +3,26 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "remote-fancontrol"
-version = "0.1.0"
+name = "remote_fancontrol"
+version = "0.1.1"
 description = "Remote fan control for AMD GPUs in VMs"
 requires-python = ">=3.7"
 dependencies = [
     "asyncio>=3.4.3",
     "colorama>=0.4.6",
-] 
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.20.0",
+    "pylint>=2.17.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "flake8>=6.0.0",
+    "isort>=5.12.0",
+]
+
+[project.scripts]
+remote-fancontrol-server = "remote_fancontrol.server.fan_controller:main"
+remote-fancontrol-client = "remote_fancontrol.client.temperature_monitor:main" 

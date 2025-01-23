@@ -72,8 +72,11 @@ if [ $INSTALL_SERVER -eq 1 ] && [ $INSTALL_CLIENT -eq 1 ]; then
     sleep 5
 fi
 
-# Install system-wide Python package
-python3 -m pip install --break-system-packages .
+## TODO: Add ability to install in either global or virtualenv
+# Install system-wide Python package and dependencies
+#echo "Installing Python package system-wide..."
+#python3 -m pip install --break-system-packages -r requirements.txt
+#python3 -m pip install --break-system-packages .
 
 # Install services based on options
 if [ $INSTALL_SERVER -eq 1 ]; then
@@ -101,7 +104,9 @@ if [ $INSTALL_SERVER -eq 1 ]; then
         cp "${SCRIPT_DIR}/fancontrol-server.json" "/etc/remote-fancontrol/"
     else
         echo "Server configuration already exists at /etc/remote-fancontrol/fancontrol-server.json"
+        echo "Copying default server configuration to /etc/remote-fancontrol/fancontrol-server.json.new"
         echo "Please verify the configuration matches your system."
+        cp "${SCRIPT_DIR}/fancontrol-server.json" "/etc/remote-fancontrol/fancontrol-server.json.new"
     fi
 fi
 
@@ -113,8 +118,39 @@ if [ $INSTALL_CLIENT -eq 1 ]; then
         cp "${SCRIPT_DIR}/fancontrol-client.json" "/etc/remote-fancontrol/"
     else
         echo "Client configuration already exists at /etc/remote-fancontrol/fancontrol-client.json"
-        echo "Please verify the server host address is correct."
+        echo "Copying default client configuration to /etc/remote-fancontrol/fancontrol-client.json.new"
+        echo "Please verify the configuration matches your system."
+        cp "${SCRIPT_DIR}/fancontrol-client.json" "/etc/remote-fancontrol/fancontrol-client.json.new"
     fi
+fi
+
+# Install package files and setup virtualenv
+if [ $INSTALL_SERVER -eq 1 ]; then
+    echo "Setting up server environment..."
+    mkdir -p /opt/remote-fancontrol
+    
+    # Clean up any old installations
+#    rm -rf /opt/remote-fancontrol/amdgpu_fancontrol
+    
+    # Copy files, excluding certain paths
+    rsync -av --exclude '.git' \
+              --exclude '.venv' \
+              --exclude '*.egg-info' \
+              --exclude '__pycache__' \
+              "${SCRIPT_DIR}/" /opt/remote-fancontrol/
+    
+    # Create and setup virtualenv
+    if [ ! -d "/opt/remote-fancontrol/venv" ]; then
+        echo "Creating new virtualenv..."
+        python3 -m venv /opt/remote-fancontrol/venv
+    fi
+    
+    echo "Installing dependencies..."
+    /opt/remote-fancontrol/venv/bin/pip install --upgrade pip
+    /opt/remote-fancontrol/venv/bin/pip install -e /opt/remote-fancontrol
+    
+    # Set permissions
+    chown -R root:root /opt/remote-fancontrol
 fi
 
 echo "Installation complete."

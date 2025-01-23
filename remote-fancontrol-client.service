@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python -m amdgpu_fancontrol.client.temperature_monitor
+ExecStart=/opt/remote-fancontrol/venv/bin/python -m remote_fancontrol.client.temperature_monitor
 Restart=always
 RestartSec=5
 User=root

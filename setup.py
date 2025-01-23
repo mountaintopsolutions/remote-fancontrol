@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="remote-fancontrol",
+    name="remote_fancontrol",
     version="0.1.0",
     packages=find_packages(),
     install_requires=[
@@ -21,8 +21,8 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "remote-fancontrol-server=amdgpu_fancontrol.server.fan_controller:main",
-            "remote-fancontrol-client=amdgpu_fancontrol.client.temperature_monitor:main",
+            "remote-fancontrol-server=remote_fancontrol.server.fan_controller:main",
+            "remote-fancontrol-client=remote_fancontrol.client.temperature_monitor:main",
         ],
     },
     python_requires=">=3.7",

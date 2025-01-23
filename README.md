@@ -71,61 +71,72 @@ Note: The server and client should be installed on different machines - the serv
 
 ### Host System (Server)
 
-First, identify your GPU's hwmon paths:
+There are two ways to configure the fan controls:
 
-```
-# List hwmon devices and their names
-ls /sys/class/hwmon/hwmon*/name
-
-# Check PWM controls (replace X with your hwmon number)
-ls /sys/class/hwmon/hwmonX/pwm*
-```
-
-Run the server with auto-detection:
-
-```
-sudo python -m amdgpu-fancontrol.server.fan_controller \
-    --host 0.0.0.0 \
-    --port 7777
-```
-
-Or specify GPU fan controls manually:
-
-```
-sudo python -m amdgpu-fancontrol.server.fan_controller \
-    --fan-config "gpu1" "/sys/class/hwmon/hwmon5/pwm4" "/sys/class/hwmon/hwmon5/pwm4_enable" \
-    --fan-config "gpu2" "/sys/class/hwmon/hwmon6/pwm4" "/sys/class/hwmon/hwmon6/pwm4_enable" \
-    --host 0.0.0.0 \
-    --port 7777
+1. Using a configuration file:
+```json
+# /etc/remote-fancontrol/fancontrol-server.json
+{
+    "temps": [35000, 55000, 80000, 90000],
+    "pwms": [0, 100, 153, 255],
+    "hysteresis": 6000,
+    "sleep_interval": 1.0,
+    "port": 7777,
+    "host": "0.0.0.0",
+    "failsafe_fan_percent": 80,
+    "initial_fan_percent": 0,
+    "fans": {
+        "gpu0": {
+            "pwm_path": "/sys/class/hwmon/hwmon3/pwm4",
+            "mode_path": "/sys/class/hwmon/hwmon3/pwm4_enable"
+        }
+    }
+}
 ```
 
-# New multi-GPU style:
-sudo python -m amdgpu-fancontrol.server.fan_controller \
+Then run:
+```bash
+python -m remote_fancontrol.server.fan_controller
+# or
+remote-fancontrol-server
+```
+
+2. Using command line arguments:
+```bash
+# Multi-GPU configuration
+sudo python -m remote_fancontrol.server.fan_controller \
     --fan-config gpu0 /sys/class/hwmon/hwmon3/pwm4 /sys/class/hwmon/hwmon3/pwm4_enable \
+    --fan-config gpu1 /sys/class/hwmon/hwmon4/pwm4 /sys/class/hwmon/hwmon4/pwm4_enable \
     --host 0.0.0.0 \
     --port 7777
 
-# Legacy single-GPU style:
-sudo python -m amdgpu-fancontrol.server.fan_controller \
+# Legacy single-GPU configuration
+sudo python -m remote_fancontrol.server.fan_controller \
     --pwm-path /sys/class/hwmon/hwmon3/pwm4 \
     --mode-path /sys/class/hwmon/hwmon3/pwm4_enable \
     --host 0.0.0.0 \
     --port 7777
-    
+```
+
 Server arguments:
 - `--fan-config`: GPU ID and its PWM/mode paths (can be specified multiple times)
-- `--host`: Host address to listen on (default: localhost)
+- `--pwm-path`: Legacy: Path to PWM control file
+- `--mode-path`: Legacy: Path to PWM mode control file
+- `--host`: Host address to listen on (default: 0.0.0.0, use specific IP or interface to restrict access)
 - `--port`: Port to listen on (default: 7777)
 - `--debug`: Enable debug logging
+- `--failsafe-speed`: Failsafe fan speed percentage (0-100)
+- `--initial-speed`: Initial fan speed percentage (0-100)
+
+Note: The default host 0.0.0.0 allows connections from any interface. To restrict access, specify a particular interface IP (e.g., 192.168.1.100).
 
 ### Virtual Machine (Client)
 
-Run with auto-detection:
-
-```
-python -m amdgpu-fancontrol.client.temperature_monitor \
-    --host <host-ip> \
-    --port 7777
+Run the client:
+```bash
+python -m remote_fancontrol.client.temperature_monitor
+# or
+remote-fancontrol-client
 ```
 
 Or specify GPU temperature sensors:

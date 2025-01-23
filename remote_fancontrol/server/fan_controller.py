@@ -112,8 +112,23 @@ class FanController:
         """
         fans = {}
 
+        # First try config file
+        config_fans = getattr(self.config, "fans", None)
+        if config_fans:
+            for gpu_id, paths in config_fans.items():
+                pwm = Path(paths["pwm_path"])
+                mode = Path(paths["mode_path"])
+                if pwm.exists() and mode.exists():
+                    fans[gpu_id] = {"pwm": pwm, "mode": mode}
+                else:
+                    logger.error(
+                        f"Invalid paths for GPU {gpu_id}: {paths['pwm_path']}, {paths['mode_path']}"
+                    )
+            if fans:
+                return fans
+
+        # Then try command line arguments
         if fan_configs:
-            # Use provided fan configurations
             for gpu_id, (pwm_path, mode_path) in fan_configs.items():
                 pwm = Path(pwm_path)
                 mode = Path(mode_path)
@@ -123,8 +138,11 @@ class FanController:
                     logger.error(
                         f"Invalid paths for GPU {gpu_id}: {pwm_path}, {mode_path}"
                     )
-        else:
-            # Auto-detect fans and assign sequential IDs
+            if fans:
+                return fans
+
+        # Auto-detect only if no fans configured
+        if not fans:
             pattern = "/sys/class/hwmon/hwmon*/pwm?"
             gpu_count = 0
             for pwm_path in glob.glob(pattern):
@@ -134,6 +152,7 @@ class FanController:
                     gpu_id = f"gpu{gpu_count}"
                     fans[gpu_id] = {"pwm": pwm, "mode": mode}
                     gpu_count += 1
+            logger.info("No fan configuration found, using auto-detection")
 
         if not fans:
             raise ValueError("No valid fan control paths found")
@@ -338,6 +357,40 @@ class FanController:
             for gpu_id in self.fans:
                 self.set_failsafe_speed(gpu_id)
 
+    async def set_failsafe_with_retry(self, gpu_id: str):
+        """Set failsafe speed with retry until successful"""
+        while True:
+            try:
+                # Convert percentage to PWM value (0-255)
+                pwm = int(self.config.FAILSAFE_FAN_PERCENT * 255 / 100)
+                self.fans[gpu_id]["pwm"].write_text(str(pwm))
+                logger.warning(
+                    f"{Fore.YELLOW}{gpu_id}: Set to failsafe speed: "
+                    f"{self.config.FAILSAFE_FAN_PERCENT}%"
+                )
+                break
+            except IOError as e:
+                logger.error(f"Failed to set failsafe speed for GPU {gpu_id}: {e}")
+                await asyncio.sleep(1)  # Wait before retry
+
+    async def cleanup(self):
+        """Clean up fan control on shutdown"""
+        # First set all fans to automatic mode
+        for gpu_id in self.fans:
+            try:
+                self.set_fan_mode(gpu_id, 2)  # 2 = automatic mode
+            except IOError as e:
+                logger.error(f"Failed to set automatic mode for GPU {gpu_id}: {e}")
+
+        # Then try to set failsafe speeds
+        tasks = []
+        for gpu_id in self.fans:
+            task = asyncio.create_task(self.set_failsafe_with_retry(gpu_id))
+            tasks.append(task)
+
+        # Wait for all failsafe settings to complete
+        await asyncio.gather(*tasks)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="AMD GPU Fan Controller Server")
@@ -359,7 +412,10 @@ def parse_args():
         help="Legacy: Path to PWM mode control file (e.g., /sys/class/hwmon/hwmon5/pwm4_enable)",
     )
     parser.add_argument(
-        "--host", type=str, default="localhost", help="Host address to listen on"
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Host address to listen on (default: 0.0.0.0, use specific IP or interface to restrict access)",
     )
     parser.add_argument("--port", type=int, default=7777, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -382,10 +438,31 @@ async def main():
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    config = FanControlConfig()
+    config = FanControlConfig.load_config("server")
+    logger.info(f"{Fore.GREEN}Loading configuration...")
+
+    # Log config source
+    config_path = None
+    for path in [
+        Path("/etc/remote-fancontrol/fancontrol-server.json"),
+        Path.home() / ".config/remote-fancontrol/fancontrol-server.json",
+        Path.cwd() / "fancontrol-server.json",
+    ]:
+        if path.exists():
+            config_path = path
+            break
+
+    if config_path:
+        logger.info(f"{Fore.CYAN}Using config file: {config_path}")
+    else:
+        logger.info(f"{Fore.YELLOW}Using default configuration")
+
+    # Override with command line arguments
     if args.host:
+        logger.info(f"{Fore.YELLOW}Overriding host from command line: {args.host}")
         config.HOST = args.host
     if args.port:
+        logger.info(f"{Fore.YELLOW}Overriding port from command line: {args.port}")
         config.PORT = args.port
 
     # Handle both new and legacy arguments
@@ -395,12 +472,23 @@ async def main():
             gpu_id: (pwm_path, mode_path)
             for gpu_id, pwm_path, mode_path in args.fan_config
         }
+        logger.info(f"{Fore.YELLOW}Using fan configuration from command line:")
+        for gpu_id, (pwm, mode) in fan_configs.items():
+            logger.info(f"{Fore.CYAN}  {gpu_id}: PWM={pwm}, MODE={mode}")
     elif args.pwm_path and args.mode_path:
         # Legacy single-GPU support
         fan_configs = {"gpu0": (args.pwm_path, args.mode_path)}
+        logger.info(
+            f"{Fore.YELLOW}Using legacy fan configuration: "
+            f"PWM={args.pwm_path}, MODE={args.mode_path}"
+        )
 
     if args.failsafe_speed is not None:
         if 0 <= args.failsafe_speed <= 100:
+            logger.info(
+                f"{Fore.YELLOW}Overriding failsafe speed from command line: "
+                f"{args.failsafe_speed}%"
+            )
             config.FAILSAFE_FAN_PERCENT = args.failsafe_speed
         else:
             logger.error("Failsafe speed must be between 0 and 100")
@@ -408,21 +496,26 @@ async def main():
 
     if args.initial_speed is not None:
         if 0 <= args.initial_speed <= 100:
+            logger.info(
+                f"{Fore.YELLOW}Overriding initial speed from command line: "
+                f"{args.initial_speed}%"
+            )
             config.INITIAL_FAN_PERCENT = args.initial_speed
         else:
             logger.error("Initial speed must be between 0 and 100")
             return
 
     try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(f"{Fore.GREEN}Starting fan control server with configuration:")
+        logger.info(f"\n{Fore.GREEN}Server configuration:")
         logger.info(
             f"{Fore.CYAN}Temperature thresholds: {[t/1000 for t in config.TEMPS]}°C"
         )
         logger.info(f"{Fore.CYAN}PWM values: {config.PWMS}")
         logger.info(f"{Fore.CYAN}Hysteresis: {config.HYSTERESIS/1000}°C")
         logger.info(f"{Fore.CYAN}Update interval: {config.SLEEP_INTERVAL}s")
+        logger.info(f"{Fore.CYAN}Network: {config.HOST}:{config.PORT}")
         logger.info(f"{Fore.CYAN}Failsafe fan speed: {config.FAILSAFE_FAN_PERCENT}%")
+        logger.info(f"{Fore.CYAN}Initial fan speed: {config.INITIAL_FAN_PERCENT}%")
 
         controller = FanController(config, fan_configs)
 
@@ -430,16 +523,19 @@ async def main():
             controller.handle_client, config.HOST, config.PORT
         )
 
-        logger.info(f"{Fore.GREEN}Server running on {config.HOST}:{config.PORT}")
+        logger.info(f"\n{Fore.GREEN}Server running on {config.HOST}:{config.PORT}")
 
         async with server:
             await server.serve_forever()
 
     except KeyboardInterrupt:
-        logger.info(f"{Fore.YELLOW}[{timestamp}] Shutting down...")
+        logger.info(f"{Fore.YELLOW}Shutting down...")
     except Exception as e:
-        logger.error(f"{Fore.RED}[{timestamp}] Fatal error: {e}")
+        logger.error(f"{Fore.RED}Fatal error: {e}")
         raise
+    finally:
+        if "controller" in locals():
+            await controller.cleanup()
 
 
 if __name__ == "__main__":

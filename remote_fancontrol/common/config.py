@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import List, Dict, Any
 import json
 import os
 from pathlib import Path
@@ -17,12 +17,14 @@ class FanControlConfig:
     SLEEP_INTERVAL: float
     # Default port for client-server communication
     PORT: int
-    # Default host for server
-    HOST: str
     # Failsafe fan speed percentage (0-100)
     FAILSAFE_FAN_PERCENT: int
-    # Initial fan speed percentage (0-100) before client connects
+    # Initial fan speed percentage (0-100)
     INITIAL_FAN_PERCENT: int
+    # Default host for server
+    HOST: str = "0.0.0.0"
+    # Fan configuration mapping
+    fans: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
     @classmethod
     def load_config(cls, config_type: str = "server") -> "FanControlConfig":
@@ -97,6 +99,10 @@ class FanControlConfig:
                 with open(default_path, "w") as f:
                     json.dump(defaults[config_type], f, indent=4)
 
+        # Add fans to config data if present in file but not in defaults
+        if config_data.get("fans") and "fans" not in defaults[config_type]:
+            defaults[config_type]["fans"] = {}
+
         return cls(
             TEMPS=config_data.get("temps", defaults[config_type]["temps"]),
             PWMS=config_data.get("pwms", defaults[config_type]["pwms"]),
@@ -114,6 +120,7 @@ class FanControlConfig:
             INITIAL_FAN_PERCENT=config_data.get(
                 "initial_fan_percent", defaults[config_type]["initial_fan_percent"]
             ),
+            fans=config_data.get("fans", defaults[config_type].get("fans", {})),
         )
 
     def __post_init__(self):
