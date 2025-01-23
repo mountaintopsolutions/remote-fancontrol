@@ -177,20 +177,15 @@ After installation, edit these files to match your system configuration:
 
 - Copy them to /etc/remote-fancontrol/ on the server and the client.
 
-Install and start the service:
-
-Server Installation:
+Restart the service:
+Server: 
 ```
-sudo ./install.sh --install-server
-sudo systemctl start remote-fancontrol-server
-sudo systemctl enable remote-fancontrol-server
+sudo systemctl restart remote-fancontrol-server
 ```
 
-Client Installation:
+Client:
 ```
-sudo ./install.sh --install-client
-sudo systemctl start remote-fancontrol-client
-sudo systemctl enable remote-fancontrol-client
+sudo systemctl restart remote-fancontrol-client
 ```
 
 ## Troubleshooting
@@ -207,4 +202,5 @@ sudo systemctl enable remote-fancontrol-client
 - Automatic fan control reset on shutdown
 - Per-GPU hysteresis to prevent rapid fan changes
 - Smooth temperature/speed transitions
-- Automatic fallback to maximum fan speed on connection loss
+- Automatic fallback to predefined fan speed on connection loss (default: 80% of maximum fan speed)
+- Non-intrusive startup by default, 0% fan speed until the client connects to the server (configurable).
