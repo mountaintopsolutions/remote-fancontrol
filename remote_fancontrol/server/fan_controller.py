@@ -186,7 +186,7 @@ class FanController:
 
         try:
             self.fans[gpu_id]["mode"].write_text(str(mode))
-            logger.info(f"Set fan mode to {mode} for GPU {gpu_id}")
+            logger.debug(f"Set fan mode to {mode} for GPU {gpu_id}")
         except IOError as e:
             logger.error(f"Failed to set fan mode for GPU {gpu_id}: {e}")
 
@@ -198,7 +198,7 @@ class FanController:
 
         try:
             self.fans[gpu_id]["pwm"].write_text(str(pwm))
-            logger.info(f"Set PWM to {pwm} for GPU {gpu_id}")
+            logger.debug(f"Set PWM to {pwm} for GPU {gpu_id}")
         except IOError as e:
             logger.error(f"Failed to set PWM for GPU {gpu_id}: {e}")
 
@@ -301,14 +301,15 @@ class FanController:
                                 <= self.temp_at_last_change[gpu_id]
                             )
 
-                            logger.info(f"{Fore.CYAN}{gpu_id}: {temp/1000:.1f}°C")
+                            # Only show temperature updates in debug mode
+                            logger.debug(f"{Fore.CYAN}{gpu_id}: {temp/1000:.1f}°C")
                             if gpu_id in self.temp_at_last_change:
                                 next_change_up = self.temp_at_last_change[gpu_id]
                                 next_change_down = (
                                     self.temp_at_last_change[gpu_id]
                                     - self.config.HYSTERESIS
                                 )
-                                logger.info(
+                                logger.debug(
                                     f"{Fore.YELLOW}{gpu_id} Next change at: "
                                     f"↑{next_change_up/1000:.1f}°C "
                                     f"↓{next_change_down/1000:.1f}°C"
@@ -318,7 +319,7 @@ class FanController:
                                 pwm = self.interpolate_pwm(temp)
                                 self.set_pwm(gpu_id, pwm)
                                 self.temp_at_last_change[gpu_id] = temp
-                                logger.info(
+                                logger.debug(
                                     f"{Fore.GREEN}{gpu_id}: "
                                     f"Updated fan speed: {pwm/255*100:.1f}%"
                                 )
@@ -326,7 +327,7 @@ class FanController:
                                 current_pwm = int(
                                     self.fans[gpu_id]["pwm"].read_text().strip()
                                 )
-                                logger.info(
+                                logger.debug(
                                     f"{Fore.BLUE}{gpu_id}: "
                                     f"Current fan speed: {current_pwm/255*100:.1f}%"
                                 )

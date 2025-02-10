@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="remote_fancontrol",
-    version="0.1.0",
+    version="0.1.2",
     packages=find_packages(),
     install_requires=[
         "asyncio>=3.4.3",

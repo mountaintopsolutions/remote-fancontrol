@@ -83,13 +83,13 @@ logger.setLevel(logging.INFO)
 class TemperatureMonitor:
     def __init__(self, config: FanControlConfig, gpu_paths: Optional[List[str]] = None):
         self.config = config
-        self.gpu_paths = []
+        self.gpu_temps = {}  # Changed from list to dict
 
         # First try command line paths
         if gpu_paths:
-            for path in gpu_paths:
+            for i, path in enumerate(gpu_paths):
                 if Path(path).exists():
-                    self.gpu_paths.append(Path(path))
+                    self.gpu_temps[f"gpu{i}"] = Path(path)
                 else:
                     logger.error(f"Temperature sensor not found: {path}")
 
@@ -98,23 +98,23 @@ class TemperatureMonitor:
             for gpu_id, gpu_config in self.config.gpus.items():
                 path = Path(gpu_config["temp_path"])
                 if path.exists():
-                    self.gpu_paths.append(path)
+                    self.gpu_temps[gpu_id] = path
                     logger.info(f"Using temperature sensor for {gpu_id}: {path}")
                 else:
                     logger.error(f"Temperature sensor not found for {gpu_id}: {path}")
 
         # Finally try auto-detection
-        if not self.gpu_paths:
+        if not self.gpu_temps:
             logger.info("No GPU paths configured, attempting auto-detection")
             pattern = "/sys/class/hwmon/hwmon*/temp1_input"
-            for path in glob.glob(pattern):
-                self.gpu_paths.append(Path(path))
+            for i, path in enumerate(glob.glob(pattern)):
+                self.gpu_temps[f"gpu{i}"] = Path(path)
 
-        if not self.gpu_paths:
+        if not self.gpu_temps:
             raise ValueError("No valid temperature sensor paths found")
 
-        logger.info(f"Monitoring {len(self.gpu_paths)} temperature sensors")
-        self.total_reconnects = 0  # Add reconnection counter
+        logger.info(f"Monitoring {len(self.gpu_temps)} temperature sensors")
+        self.total_reconnects = 0
 
     def _is_gpu_temp(self, hwmon_path: Path) -> bool:
         """Check if hwmon path belongs to a GPU"""
@@ -131,18 +131,18 @@ class TemperatureMonitor:
         """Read current temperatures from all monitored GPUs"""
         temperatures = {}
 
-        for gpu_name, temp_path in self.gpu_paths.items():
+        for gpu_id, temp_path in self.gpu_temps.items():
             try:
                 if temp_path.exists():
                     temp = int(temp_path.read_text().strip())
-                    temperatures[gpu_name] = temp
-                    logger.debug(f"{Fore.CYAN}{gpu_name}: {temp/1000:.1f}°C")
+                    temperatures[gpu_id] = temp
+                    logger.debug(f"{Fore.CYAN}{gpu_id}: {temp/1000:.1f}°C")
                 else:
-                    temperatures[gpu_name] = None
+                    temperatures[gpu_id] = None
                     logger.error(f"Temperature file not found: {temp_path}")
             except (ValueError, IOError) as e:
-                temperatures[gpu_name] = None
-                logger.error(f"Failed to read temperature for {gpu_name}: {e}")
+                temperatures[gpu_id] = None
+                logger.error(f"Failed to read temperature for {gpu_id}: {e}")
 
         return temperatures
 
@@ -237,7 +237,10 @@ async def main():
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    config = FanControlConfig()
+    # Load config file with client defaults
+    config = FanControlConfig.load_config("client")
+
+    # Override with command line arguments if provided
     if args.host:
         config.HOST = args.host
     if args.port:
@@ -246,12 +249,16 @@ async def main():
         config.SLEEP_INTERVAL = args.interval
 
     try:
+        logger.info(f"{Fore.GREEN}Starting temperature monitor...")
+        logger.info(f"{Fore.CYAN}Server: {config.HOST}:{config.PORT}")
+        logger.info(f"{Fore.CYAN}Update interval: {config.SLEEP_INTERVAL}s")
+
         monitor = TemperatureMonitor(config, args.gpu_paths)
         await monitor.monitor_loop()
     except KeyboardInterrupt:
-        logger.info("Shutting down...")
+        logger.info(f"{Fore.YELLOW}Shutting down...")
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f"{Fore.RED}Fatal error: {e}")
         raise
 
 

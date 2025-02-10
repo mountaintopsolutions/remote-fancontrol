@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "remote_fancontrol"
-version = "0.1.1"
+version = "0.1.2"
 description = "Remote fan control for AMD GPUs in VMs"
 requires-python = ">=3.7"
 dependencies = [

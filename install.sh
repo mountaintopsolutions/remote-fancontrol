@@ -95,42 +95,12 @@ if [ $INSTALL_CLIENT -eq 1 ]; then
     fi
 fi
 
-# Install config files
-if [ $INSTALL_SERVER -eq 1 ]; then
-    mkdir -p /etc/remote-fancontrol
-    if [ ! -f "/etc/remote-fancontrol/fancontrol-server.json" ]; then
-        echo "Installing default server configuration to /etc/remote-fancontrol/fancontrol-server.json"
-        echo "Please edit this file to match your system configuration."
-        cp "${SCRIPT_DIR}/fancontrol-server.json" "/etc/remote-fancontrol/"
-    else
-        echo "Server configuration already exists at /etc/remote-fancontrol/fancontrol-server.json"
-        echo "Copying default server configuration to /etc/remote-fancontrol/fancontrol-server.json.new"
-        echo "Please verify the configuration matches your system."
-        cp "${SCRIPT_DIR}/fancontrol-server.json" "/etc/remote-fancontrol/fancontrol-server.json.new"
-    fi
-fi
-
-if [ $INSTALL_CLIENT -eq 1 ]; then
-    mkdir -p /etc/remote-fancontrol
-    if [ ! -f "/etc/remote-fancontrol/fancontrol-client.json" ]; then
-        echo "Installing default client configuration to /etc/remote-fancontrol/fancontrol-client.json"
-        echo "Please edit this file to set the correct server host address."
-        cp "${SCRIPT_DIR}/fancontrol-client.json" "/etc/remote-fancontrol/"
-    else
-        echo "Client configuration already exists at /etc/remote-fancontrol/fancontrol-client.json"
-        echo "Copying default client configuration to /etc/remote-fancontrol/fancontrol-client.json.new"
-        echo "Please verify the configuration matches your system."
-        cp "${SCRIPT_DIR}/fancontrol-client.json" "/etc/remote-fancontrol/fancontrol-client.json.new"
-    fi
-fi
-
 # Install package files and setup virtualenv
-if [ $INSTALL_SERVER -eq 1 ]; then
-    echo "Setting up server environment..."
-    mkdir -p /opt/remote-fancontrol
+function setup_environment() {
+    local install_type=$1
     
-    # Clean up any old installations
-#    rm -rf /opt/remote-fancontrol/amdgpu_fancontrol
+    echo "Setting up ${install_type} environment..."
+    mkdir -p /opt/remote-fancontrol
     
     # Copy files, excluding certain paths
     rsync -av --exclude '.git' \
@@ -151,6 +121,37 @@ if [ $INSTALL_SERVER -eq 1 ]; then
     
     # Set permissions
     chown -R root:root /opt/remote-fancontrol
+}
+
+# Install config files
+if [ $INSTALL_SERVER -eq 1 ]; then
+    mkdir -p /etc/remote-fancontrol
+    if [ ! -f "/etc/remote-fancontrol/fancontrol-server.json" ]; then
+        echo "Installing default server configuration to /etc/remote-fancontrol/fancontrol-server.json"
+        echo "Please edit this file to match your system configuration."
+        cp "${SCRIPT_DIR}/fancontrol-server.json" "/etc/remote-fancontrol/"
+    else
+        echo "Server configuration already exists at /etc/remote-fancontrol/fancontrol-server.json"
+        echo "Copying default server configuration to /etc/remote-fancontrol/fancontrol-server.json.new"
+        echo "Please verify the configuration matches your system."
+        cp "${SCRIPT_DIR}/fancontrol-server.json" "/etc/remote-fancontrol/fancontrol-server.json.new"
+    fi
+    setup_environment "server"
+fi
+
+if [ $INSTALL_CLIENT -eq 1 ]; then
+    mkdir -p /etc/remote-fancontrol
+    if [ ! -f "/etc/remote-fancontrol/fancontrol-client.json" ]; then
+        echo "Installing default client configuration to /etc/remote-fancontrol/fancontrol-client.json"
+        echo "Please edit this file to set the correct server host address."
+        cp "${SCRIPT_DIR}/fancontrol-client.json" "/etc/remote-fancontrol/"
+    else
+        echo "Client configuration already exists at /etc/remote-fancontrol/fancontrol-client.json"
+        echo "Copying default client configuration to /etc/remote-fancontrol/fancontrol-client.json.new"
+        echo "Please verify the configuration matches your system."
+        cp "${SCRIPT_DIR}/fancontrol-client.json" "/etc/remote-fancontrol/fancontrol-client.json.new"
+    fi
+    setup_environment "client"
 fi
 
 echo "Installation complete."
