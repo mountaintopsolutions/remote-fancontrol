@@ -7,6 +7,7 @@ from typing import Optional, Dict, Tuple
 import glob
 from datetime import datetime
 from colorama import Fore, Style, init
+import re
 
 from ..common.config import FanControlConfig
 
@@ -115,31 +116,68 @@ class FanController:
         # First try config file
         config_fans = getattr(self.config, "fans", None)
         if config_fans:
-            for gpu_id, paths in config_fans.items():
-                pwm = Path(paths["pwm_path"])
-                mode = Path(paths["mode_path"])
-                if pwm.exists() and mode.exists():
-                    fans[gpu_id] = {"pwm": pwm, "mode": mode}
-                else:
-                    logger.error(
-                        f"Invalid paths for GPU {gpu_id}: {paths['pwm_path']}, {paths['mode_path']}"
-                    )
-            if fans:
-                return fans
+            for fan_id, paths in config_fans.items():
+                # Get the reference GPU for this fan (defaults to fan_id if not specified)
+                ref_gpu = paths.get("reference_gpu", fan_id)
+                fan_configured = False
 
-        # Then try command line arguments
-        if fan_configs:
+                # Check for hwmon_name in config
+                if "hwmon_name" in paths:
+                    hwmon_path = self._find_hwmon_by_name(paths["hwmon_name"])
+                    if hwmon_path:
+                        pwm = hwmon_path / paths.get("pwm_file", "pwm1")
+                        mode = hwmon_path / paths.get("mode_file", "pwm1_enable")
+                        if pwm.exists() and mode.exists():
+                            fans[fan_id] = {
+                                "pwm": pwm,
+                                "mode": mode,
+                                "reference_gpu": ref_gpu,
+                            }
+                            logger.info(
+                                f"Configured fan {fan_id} using hwmon {paths['hwmon_name']}"
+                            )
+                            fan_configured = True
+                        else:
+                            logger.error(
+                                f"Invalid paths for fan {fan_id} in hwmon {hwmon_path}: {pwm}, {mode}"
+                            )
+                    else:
+                        logger.error(
+                            f"No hwmon device found matching: {paths['hwmon_name']}"
+                        )
+
+                # Fall back to direct paths if specified and hwmon config failed
+                if not fan_configured and "pwm_path" in paths and "mode_path" in paths:
+                    pwm = Path(paths["pwm_path"])
+                    mode = Path(paths["mode_path"])
+                    if pwm.exists() and mode.exists():
+                        fans[fan_id] = {
+                            "pwm": pwm,
+                            "mode": mode,
+                            "reference_gpu": ref_gpu,
+                        }
+                        logger.info(f"Configured fan {fan_id} using direct paths")
+                    else:
+                        logger.error(
+                            f"Invalid paths for fan {fan_id}: {paths['pwm_path']}, {paths['mode_path']}"
+                        )
+                elif not fan_configured:
+                    logger.error(
+                        f"Fan {fan_id} configuration must specify either hwmon_name or pwm_path/mode_path"
+                    )
+
+        # Then try command line arguments if no fans configured yet
+        if not fans and fan_configs:
             for gpu_id, (pwm_path, mode_path) in fan_configs.items():
                 pwm = Path(pwm_path)
                 mode = Path(mode_path)
                 if pwm.exists() and mode.exists():
-                    fans[gpu_id] = {"pwm": pwm, "mode": mode}
+                    fans[gpu_id] = {"pwm": pwm, "mode": mode, "reference_gpu": gpu_id}
+                    logger.info(f"Configured fan {gpu_id} using command line paths")
                 else:
                     logger.error(
                         f"Invalid paths for GPU {gpu_id}: {pwm_path}, {mode_path}"
                     )
-            if fans:
-                return fans
 
         # Auto-detect only if no fans configured
         if not fans:
@@ -150,14 +188,16 @@ class FanController:
                 mode = pwm.parent / f"{pwm.name}_enable"
                 if mode.exists():
                     gpu_id = f"gpu{gpu_count}"
-                    fans[gpu_id] = {"pwm": pwm, "mode": mode}
+                    fans[gpu_id] = {"pwm": pwm, "mode": mode, "reference_gpu": gpu_id}
                     gpu_count += 1
-            logger.info("No fan configuration found, using auto-detection")
+                    logger.info(f"Auto-detected fan {gpu_id}")
+            if gpu_count > 0:
+                logger.info("Using auto-detected fan configuration")
 
         if not fans:
             raise ValueError("No valid fan control paths found")
 
-        logger.info(f"Configured fans for GPUs: {list(fans.keys())}")
+        logger.info(f"Configured fans: {list(fans.keys())}")
         return fans
 
     @staticmethod
@@ -176,6 +216,33 @@ class FanController:
             return None
         except (IOError, OSError) as e:
             logger.debug(f"Error reading GPU name: {e}")
+            return None
+
+    def _find_hwmon_by_name(self, pattern: str) -> Optional[Path]:
+        """Find hwmon device path by name pattern
+
+        Args:
+            pattern: Regex pattern to match against hwmon name
+
+        Returns:
+            Path to matching hwmon device or None if not found
+        """
+        # Convert pattern to regex if it's not already
+        if not pattern.startswith("^") and not pattern.endswith("$"):
+            pattern = f".*{pattern}.*"
+
+        try:
+            for hwmon in Path("/sys/class/hwmon").glob("hwmon*"):
+                name_file = hwmon / "name"
+                if name_file.exists():
+                    name = name_file.read_text().strip()
+                    if re.match(pattern, name, re.IGNORECASE):
+                        logger.debug(f"Found matching hwmon device: {name} at {hwmon}")
+                        return hwmon
+            logger.debug(f"No hwmon device found matching pattern: {pattern}")
+            return None
+        except (IOError, OSError) as e:
+            logger.error(f"Error searching for hwmon device: {e}")
             return None
 
     def set_fan_mode(self, gpu_id: str, mode: int):
@@ -289,46 +356,61 @@ class FanController:
                         message = json.loads(data.decode())
                         temps = message["temperatures"]
 
-                        for gpu_id, temp in temps.items():
-                            if temp is None:
+                        # Track which GPUs have been processed to avoid duplicate updates
+                        processed_gpus = set()
+
+                        # Process each fan based on its reference GPU
+                        for fan_id, fan_info in self.fans.items():
+                            ref_gpu = fan_info["reference_gpu"]
+
+                            # Skip if we don't have temperature data for the reference GPU
+                            if ref_gpu not in temps or temps[ref_gpu] is None:
                                 continue
+
+                            temp = temps[ref_gpu]
 
                             # Force update on first temperature reading after connection
                             should_update = (
-                                gpu_id not in self.temp_at_last_change
-                                or temp > self.temp_at_last_change[gpu_id]
+                                ref_gpu not in self.temp_at_last_change
+                                or temp > self.temp_at_last_change[ref_gpu]
                                 or temp + self.config.HYSTERESIS
-                                <= self.temp_at_last_change[gpu_id]
+                                <= self.temp_at_last_change[ref_gpu]
                             )
 
                             # Only show temperature updates in debug mode
-                            logger.debug(f"{Fore.CYAN}{gpu_id}: {temp/1000:.1f}°C")
-                            if gpu_id in self.temp_at_last_change:
-                                next_change_up = self.temp_at_last_change[gpu_id]
+                            if ref_gpu not in processed_gpus:
+                                logger.debug(f"{Fore.CYAN}{ref_gpu}: {temp/1000:.1f}°C")
+                                processed_gpus.add(ref_gpu)
+
+                            if (
+                                ref_gpu in self.temp_at_last_change
+                                and ref_gpu not in processed_gpus
+                            ):
+                                next_change_up = self.temp_at_last_change[ref_gpu]
                                 next_change_down = (
-                                    self.temp_at_last_change[gpu_id]
+                                    self.temp_at_last_change[ref_gpu]
                                     - self.config.HYSTERESIS
                                 )
                                 logger.debug(
-                                    f"{Fore.YELLOW}{gpu_id} Next change at: "
+                                    f"{Fore.YELLOW}{ref_gpu} Next change at: "
                                     f"↑{next_change_up/1000:.1f}°C "
                                     f"↓{next_change_down/1000:.1f}°C"
                                 )
 
                             if should_update:
                                 pwm = self.interpolate_pwm(temp)
-                                self.set_pwm(gpu_id, pwm)
-                                self.temp_at_last_change[gpu_id] = temp
+                                self.set_pwm(fan_id, pwm)
+                                self.temp_at_last_change[ref_gpu] = temp
                                 logger.debug(
-                                    f"{Fore.GREEN}{gpu_id}: "
+                                    f"{Fore.GREEN}Fan {fan_id} (ref: {ref_gpu}): "
                                     f"Updated fan speed: {pwm/255*100:.1f}%"
                                 )
                             else:
                                 current_pwm = int(
-                                    self.fans[gpu_id]["pwm"].read_text().strip()
+                                    self.fans[fan_id]["pwm"].read_text().strip()
                                 )
                                 logger.debug(
-                                    f"{Fore.BLUE}{gpu_id}: "
+                                    f"{Fore.BLUE}Fan {fan_id} (ref: {ref_gpu}): "
                                     f"Current fan speed: {current_pwm/255*100:.1f}%"
                                 )
 
@@ -403,6 +485,13 @@ def parse_args():
         help="Fan configuration for a GPU (can be specified multiple times)",
     )
     parser.add_argument(
+        "--hwmon-config",
+        nargs=4,
+        action="append",
+        metavar=("GPU_ID", "HWMON_NAME", "PWM_FILE", "MODE_FILE"),
+        help="Fan configuration using hwmon name (can be specified multiple times)",
+    )
+    parser.add_argument(
         "--pwm-path",
         type=str,
         help="Legacy: Path to PWM control file (e.g., /sys/class/hwmon/hwmon5/pwm4)",
@@ -465,6 +554,21 @@ async def main():
     if args.port:
         logger.info(f"{Fore.YELLOW}Overriding port from command line: {args.port}")
         config.PORT = args.port
+
+    # Handle hwmon configuration
+    if args.hwmon_config:
+        if not hasattr(config, "fans"):
+            config.fans = {}
+        for gpu_id, hwmon_name, pwm_file, mode_file in args.hwmon_config:
+            config.fans[gpu_id] = {
+                "hwmon_name": hwmon_name,
+                "pwm_file": pwm_file,
+                "mode_file": mode_file,
+            }
+            logger.info(
+                f"{Fore.YELLOW}Using hwmon configuration for {gpu_id}:"
+                f" {hwmon_name} ({pwm_file}, {mode_file})"
+            )
 
     # Handle both new and legacy arguments
     fan_configs = None

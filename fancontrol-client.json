@@ -1,5 +1,13 @@
 {
     "sleep_interval": 1.0,
     "port": 7777,
-    "host": "192.168.70.31"
+    "host": "192.168.70.31",
+    "gpus": {
+        "gpu0": {
+            "temp_path": "/sys/class/hwmon/hwmon0/temp1_input"
+        },
+        "gpu1": {
+            "temp_path": "/sys/class/hwmon/hwmon1/temp1_input"
+        }
+    }
 } 

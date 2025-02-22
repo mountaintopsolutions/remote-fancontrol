@@ -6,5 +6,24 @@
     "port": 7777,
     "host": "0.0.0.0",
     "failsafe_fan_percent": 80,
-    "initial_fan_percent": 0
+    "initial_fan_percent": 0,
+    "fans": {
+        "case_fan1": {
+            "hwmon_name": "nct6792",
+            "pwm_file": "pwm1",
+            "mode_file": "pwm1_enable",
+            "reference_gpu": "gpu0"
+        },
+        "case_fan2": {
+            "hwmon_name": "nct6792",
+            "pwm_file": "pwm2",
+            "mode_file": "pwm2_enable",
+            "reference_gpu": "gpu0"
+        },
+        "gpu0": {
+            "hwmon_name": "amdgpu",
+            "pwm_file": "pwm1",
+            "mode_file": "pwm1_enable"
+        }
+    }
 } 
